@@ -152,11 +152,13 @@ def generate_evaluation_report(
 
     html_content = f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="ko">
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>LLM Persona Evaluation Report</title>
         <style>
-            body {{ font-family: 'AppleGothic', 'Malgun Gothic', sans-serif; margin: 40px; background-color: #f5f5f5; }}
+            body {{ font-family: 'AppleGothic', 'Malgun Gothic', 'Noto Sans KR', sans-serif; margin: 40px; background-color: #f5f5f5; }}
             .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
             h1, h2 {{ color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }}
             .summary-box {{ display: flex; justify-content: space-around; background: #e3f2fd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
