@@ -7,6 +7,8 @@ python-dotenv
 torch --index-url https://download.pytorch.org/whl/cu121
 transformers
 accelerate
-bitsandbytes  # for quantization if needed
+bitsandbytes
 protobuf
 scipy
+# Observability
+langfuse

@@ -5,6 +5,14 @@ import torch
 from typing import Dict, Any, Union
 from openai import OpenAI
 
+# Langfuse Integration
+try:
+    from langfuse.decorators import observe, langfuse_context
+
+    LANGFUSE_AVAILABLE = True
+except ImportError:
+    LANGFUSE_AVAILABLE = False
+
 # Try importing transformers (graceful failure if not installed)
 try:
     from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
@@ -39,11 +47,10 @@ class RealModelInterface:
                 f"Loading Local JSON Model: {model_name} (This may take a while to download if not cached)..."
             )
             try:
-                # Automatic download if not exists in cache
                 self.tokenizer = AutoTokenizer.from_pretrained(model_name)
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_name,
-                    device_map="auto",  # Automatically use GPU
+                    device_map="auto",
                     torch_dtype=torch.float16,
                     trust_remote_code=True,
                 )
@@ -54,30 +61,48 @@ class RealModelInterface:
                 print(f"Error loading local model {model_name}: {e}")
                 raise e
         else:
-            # API Client
             self.client = OpenAI(api_key=api_key, base_url=base_url)
 
+    @observe(as_type="generation")
     def generate(
         self, system_prompt: str, user_input: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Routes generation to either Local HF or API.
+        Routes generation to either Local HF or API and traces with Langfuse.
         """
+        # Set Model Name only once for the trace
+        if LANGFUSE_AVAILABLE:
+            langfuse_context.update_current_observation(model=self.model_name)
+
         if self.is_local:
-            return self._generate_local(system_prompt, user_input)
+            result = self._generate_local(system_prompt, user_input)
         else:
-            return self._generate_api(system_prompt, user_input)
+            result = self._generate_api(system_prompt, user_input)
+
+        # Manually update token usage in Langfuse
+        if LANGFUSE_AVAILABLE:
+            langfuse_context.update_current_observation(
+                usage={
+                    "input": result["input_tokens"],
+                    "output": result["output_tokens"],
+                    "total": result["input_tokens"] + result["output_tokens"],
+                    "unit": "TOKENS",
+                }
+            )
+
+        return result
 
     def _generate_local(
         self, system_prompt: str, user_input: Dict[str, Any]
     ) -> Dict[str, Any]:
         user_content = json.dumps(user_input, ensure_ascii=False)
+
+        # Prepare Prompt properly using chat template
         chat = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ]
 
-        # Apply chat template if available, else concat manually
         try:
             prompt_text = self.tokenizer.apply_chat_template(
                 chat, tokenize=False, add_generation_prompt=True
@@ -87,8 +112,6 @@ class RealModelInterface:
 
         start_time = time.time()
 
-        # In local transformers, capturing exact TTFT is harder without streamer customization.
-        # We will approximate TTFT or ignore it for now, and measure Total Latency.
         try:
             outputs = self.pipe(
                 prompt_text,
@@ -104,12 +127,17 @@ class RealModelInterface:
         latency = time.time() - start_time
         cleaned_text = self._clean_json_markdown(response_text)
 
+        # Calculate tokens locally
+        # HF tokenizer returns a list of ids, len() gives count
+        in_tokens = len(self.tokenizer.encode(prompt_text))
+        out_tokens = len(self.tokenizer.encode(response_text))
+
         return {
             "text": cleaned_text,
-            "ttft": 0.0,  # Not easily measured in simple pipeline
+            "ttft": 0.0,
             "latency": latency,
-            "input_tokens": len(prompt_text) // 4,
-            "output_tokens": len(response_text) // 4,
+            "input_tokens": in_tokens,
+            "output_tokens": out_tokens,
         }
 
     def _generate_api(
@@ -145,12 +173,17 @@ class RealModelInterface:
             if ttft == 0:
                 ttft = time.time() - start_time
 
+            # Approximate simple token count for API if not provided in stream
+            # (Stream usually doesn't give usage unless configured)
+            in_tokens = len(system_prompt + user_content) // 4
+            out_tokens = len(response_text) // 4
+
             return {
                 "text": self._clean_json_markdown(response_text),
                 "ttft": ttft,
                 "latency": time.time() - start_time,
-                "input_tokens": len(str(user_input)) // 4,
-                "output_tokens": len(response_text) // 4,
+                "input_tokens": in_tokens,
+                "output_tokens": out_tokens,
             }
 
         except Exception as e:
