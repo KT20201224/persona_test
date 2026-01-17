@@ -10,4 +10,4 @@ accelerate
 bitsandbytes
 protobuf
 scipy
-
+sentencepiece
