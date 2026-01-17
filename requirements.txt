@@ -1,0 +1,12 @@
+openai>=1.0.0
+pandas
+matplotlib
+seaborn
+python-dotenv
+# Hugging Face & PyTorch
+torch --index-url https://download.pytorch.org/whl/cu121
+transformers
+accelerate
+bitsandbytes  # for quantization if needed
+protobuf
+scipy

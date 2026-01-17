@@ -1,0 +1,247 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+from typing import List, Dict
+import json
+import numpy as np
+import os
+import logging
+
+# Setup Logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+# Font Setup (Korean Support)
+import matplotlib.font_manager as fm
+import platform
+
+system_name = platform.system()
+if system_name == "Darwin":  # Mac
+    plt.rcParams["font.family"] = "AppleGothic"
+elif system_name == "Windows":
+    plt.rcParams["font.family"] = "Malgun Gothic"
+else:
+    # Linux/Server - try to find a font or use default
+    pass
+plt.rcParams["axes.unicode_minus"] = False
+
+
+def generate_evaluation_report(
+    test_results: List[Dict], output_path: str = "./reports", format: str = "html"
+) -> str:
+    """
+    Generates a visualized evaluation report from test results.
+    """
+    if not test_results:
+        logging.warning("No test results provided. Skipping report generation.")
+        return ""
+
+    os.makedirs(output_path, exist_ok=True)
+    os.makedirs(os.path.join(output_path, "images"), exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Convert to DataFrame
+    df = pd.DataFrame(
+        [
+            {
+                "test_id": res.get("test_id", idx),
+                "model": res.get("model_name", "Unknown"),
+                "case_type": res.get("case_type", "Normal"),
+                "execution_time": res.get("execution_time", 0),
+                "ttft": res.get("ttft", 0),  # Added TTFT
+                "input_tokens": res.get("input_tokens", 0),
+                "output_tokens": res.get("output_tokens", 0),
+                **res.get("metrics", {}),
+            }
+            for idx, res in enumerate(test_results)
+        ]
+    )
+
+    # 1. Image Generation
+    img_paths = {}
+
+    # a) Overall Score Bar Chart
+    plt.figure(figsize=(10, 6))
+    sns.barplot(
+        data=df,
+        x="model",
+        y="overall_score",
+        hue="model",
+        palette="viridis",
+        errorbar=None,
+    )
+    plt.axhline(0.7, color="r", linestyle="--", label="Pass Criteria (0.7)")
+    plt.title("Model Overall Score Comparison")
+    plt.ylim(0, 1.1)
+    bar_path = os.path.join(output_path, f"images/comparison_bar_{timestamp}.png")
+    plt.savefig(bar_path, bbox_inches="tight")
+    plt.close()
+    img_paths["bar"] = os.path.relpath(bar_path, output_path)
+
+    # b) Radar Chart (Metrics Profile)
+    metrics_cols = [
+        "json_schema_compliance",
+        "field_coverage",
+        "classification_accuracy",
+        "reasoning_depth",
+        "discussion_readiness",
+        "specificity",
+        "consistency",
+        "extra_text_parsing",
+    ]
+    # Filter out metrics that might not exist in df if error occurred
+    metrics_cols = [c for c in metrics_cols if c in df.columns]
+
+    avg_metrics = df.groupby("model")[metrics_cols].mean()
+
+    if not avg_metrics.empty:
+        plt.figure(figsize=(10, 10))
+        categories = metrics_cols
+        N = len(categories)
+        angles = [n / float(N) * 2 * np.pi for n in range(N)]
+        angles += [angles[0]]
+
+        ax = plt.subplot(111, polar=True)
+        ax.set_theta_offset(np.pi / 2)
+        ax.set_theta_direction(-1)
+        plt.xticks(angles[:-1], categories)
+
+        for model_name in avg_metrics.index:
+            values = avg_metrics.loc[model_name].values.flatten().tolist()
+            if len(values) == N:  # Consistency check
+                values += [values[0]]
+                ax.plot(
+                    angles, values, linewidth=1, linestyle="solid", label=model_name
+                )
+                ax.fill(angles, values, alpha=0.1)
+
+        plt.legend(loc="upper right", bbox_to_anchor=(0.1, 0.1))
+        plt.title("Model Metrics Profile (Radar Chart)")
+        radar_path = os.path.join(output_path, f"images/radar_chart_{timestamp}.png")
+        plt.savefig(radar_path, bbox_inches="tight")
+        plt.close()
+        img_paths["radar"] = os.path.relpath(radar_path, output_path)
+
+    # c) Heatmap
+    if not avg_metrics.empty:
+        plt.figure(figsize=(12, 6))
+        sns.heatmap(avg_metrics, annot=True, cmap="RdYlGn", vmin=0, vmax=1, fmt=".2f")
+        plt.title("Model x Metrics Heatmap")
+        heatmap_path = os.path.join(output_path, f"images/heatmap_{timestamp}.png")
+        plt.savefig(heatmap_path, bbox_inches="tight")
+        plt.close()
+        img_paths["heatmap"] = os.path.relpath(heatmap_path, output_path)
+
+    # d) Efficiency Comparison (New)
+    plt.figure(figsize=(10, 6))
+    if "ttft" in df.columns and df["ttft"].sum() > 0:
+        sns.boxplot(data=df, x="model", y="ttft", palette="coolwarm")
+        plt.title("Time To First Token (TTFT) by Model")
+        ttft_path = os.path.join(output_path, f"images/ttft_box_{timestamp}.png")
+        plt.savefig(ttft_path, bbox_inches="tight")
+        plt.close()
+        img_paths["ttft"] = os.path.relpath(ttft_path, output_path)
+
+    # 3. HTML Report
+    total_cases = len(df)
+    models = df["model"].unique().tolist()
+    pass_rate = (df["overall_score"] >= 0.7).mean() * 100
+    avg_time = df["execution_time"].mean()
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>LLM Persona Evaluation Report</title>
+        <style>
+            body {{ font-family: 'AppleGothic', 'Malgun Gothic', sans-serif; margin: 40px; background-color: #f5f5f5; }}
+            .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            h1, h2 {{ color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }}
+            .summary-box {{ display: flex; justify-content: space-around; background: #e3f2fd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
+            .stat {{ text-align: center; }}
+            .value {{ font-size: 24px; font-weight: bold; color: #1976d2; }}
+            .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }}
+            img {{ max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+            th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+            th {{ background-color: #f8f9fa; }}
+            .pass {{ color: green; font-weight: bold; }}
+            .fail {{ color: red; font-weight: bold; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>LLM Persona Generation Evaluation Report</h1>
+            <p>Generated at: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
+            
+            <div class="summary-box">
+                <div class="stat"><div class="value">{len(models)}</div><div class="label">Models Evaluated</div></div>
+                <div class="stat"><div class="value">{total_cases}</div><div class="label">Total Cases</div></div>
+                <div class="stat"><div class="value">{pass_rate:.1f}%</div><div class="label">Pass Rate</div></div>
+                <div class="stat"><div class="value">{avg_time:.2f}s</div><div class="label">Avg Latency</div></div>
+            </div>
+
+            <h2>1. Visual Analysis</h2>
+            <div class="grid">
+                <div>
+                    <h3>Overall Comparison</h3>
+                    <img src="{img_paths.get("bar", "")}" alt="Bar Chart">
+                </div>
+                <div>
+                    <h3>Metrics Profile</h3>
+                    <img src="{img_paths.get("radar", "")}" alt="Radar Chart">
+                </div>
+            </div>
+            <div>
+                <h3>Detailed Metrics Heatmap</h3>
+                <img src="{img_paths.get("heatmap", "")}" alt="Heatmap">
+            </div>
+            """
+
+    if "ttft" in img_paths:
+        html_content += f"""
+            <div>
+                <h3>Time To First Token (TTFT) Analysis</h3>
+                <img src="{img_paths["ttft"]}" alt="TTFT Chart">
+            </div>
+        """
+
+    html_content += f"""
+            <h2>2. Model Performance Summary</h2>
+            {avg_metrics.to_html(classes="table", float_format="%.2f")}
+
+            <h2>3. Detailed Test Results</h2>
+            <table>
+                <tr>
+                    <th>ID</th><th>Model</th><th>Type</th><th>Score</th><th>TTFT</th><th>Latency</th><th>Status</th>
+                </tr>
+                {
+        "".join(
+            [
+                f"<tr>"
+                f"<td>{row['test_id']}</td>"
+                f"<td>{row['model']}</td>"
+                f"<td>{row['case_type']}</td>"
+                f"<td>{row['overall_score']:.2f}</td>"
+                f"<td>{row.get('ttft', 0):.3f}s</td>"
+                f"<td>{row['execution_time']:.2f}s</td>"
+                f"<td class='{'pass' if row['overall_score'] >= 0.7 else 'fail'}'>{'PASS' if row['overall_score'] >= 0.7 else 'FAIL'}</td>"
+                f"</tr>"
+                for _, row in df.iterrows()
+            ]
+        )
+    }
+            </table>
+        </div>
+    </body>
+    </html>
+    """
+
+    report_file = os.path.join(output_path, f"persona_eval_report_{timestamp}.html")
+    with open(report_file, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    logging.info(f"Report saved to: {report_file}")
+    return report_file
