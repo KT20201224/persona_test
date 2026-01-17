@@ -50,9 +50,11 @@ def generate_evaluation_report(
                 "model": res.get("model_name", "Unknown"),
                 "case_type": res.get("case_type", "Normal"),
                 "execution_time": res.get("execution_time", 0),
-                "ttft": res.get("ttft", 0),  # Added TTFT
+                "ttft": res.get("ttft", 0),
                 "input_tokens": res.get("input_tokens", 0),
                 "output_tokens": res.get("output_tokens", 0),
+                "total_tokens": res.get("input_tokens", 0)
+                + res.get("output_tokens", 0),
                 **res.get("metrics", {}),
             }
             for idx, res in enumerate(test_results)
@@ -63,22 +65,25 @@ def generate_evaluation_report(
     img_paths = {}
 
     # a) Overall Score Bar Chart
-    plt.figure(figsize=(10, 6))
-    sns.barplot(
-        data=df,
-        x="model",
-        y="overall_score",
-        hue="model",
-        palette="viridis",
-        errorbar=None,
-    )
-    plt.axhline(0.7, color="r", linestyle="--", label="Pass Criteria (0.7)")
-    plt.title("Model Overall Score Comparison")
-    plt.ylim(0, 1.1)
-    bar_path = os.path.join(output_path, f"images/comparison_bar_{timestamp}.png")
-    plt.savefig(bar_path, bbox_inches="tight")
-    plt.close()
-    img_paths["bar"] = os.path.relpath(bar_path, output_path)
+    try:
+        plt.figure(figsize=(10, 6))
+        sns.barplot(
+            data=df,
+            x="model",
+            y="overall_score",
+            hue="model",
+            palette="viridis",
+            errorbar=None,
+        )
+        plt.axhline(0.7, color="r", linestyle="--", label="Pass Criteria (0.7)")
+        plt.title("Model Overall Score Comparison")
+        plt.ylim(0, 1.1)
+        bar_path = os.path.join(output_path, f"images/comparison_bar_{timestamp}.png")
+        plt.savefig(bar_path, bbox_inches="tight")
+        plt.close()
+        img_paths["bar"] = os.path.relpath(bar_path, output_path)
+    except Exception as e:
+        logging.error(f"Failed to generate bar chart: {e}")
 
     # b) Radar Chart (Metrics Profile)
     metrics_cols = [
@@ -91,64 +96,100 @@ def generate_evaluation_report(
         "consistency",
         "extra_text_parsing",
     ]
-    # Filter out metrics that might not exist in df if error occurred
     metrics_cols = [c for c in metrics_cols if c in df.columns]
 
-    avg_metrics = df.groupby("model")[metrics_cols].mean()
+    if not df.empty:
+        try:
+            avg_metrics = df.groupby("model")[metrics_cols].mean()
 
-    if not avg_metrics.empty:
-        plt.figure(figsize=(10, 10))
-        categories = metrics_cols
-        N = len(categories)
-        angles = [n / float(N) * 2 * np.pi for n in range(N)]
-        angles += [angles[0]]
+            plt.figure(figsize=(10, 10))
+            categories = metrics_cols
+            N = len(categories)
+            angles = [n / float(N) * 2 * np.pi for n in range(N)]
+            angles += [angles[0]]
 
-        ax = plt.subplot(111, polar=True)
-        ax.set_theta_offset(np.pi / 2)
-        ax.set_theta_direction(-1)
-        plt.xticks(angles[:-1], categories)
+            ax = plt.subplot(111, polar=True)
+            ax.set_theta_offset(np.pi / 2)
+            ax.set_theta_direction(-1)
+            plt.xticks(angles[:-1], categories)
 
-        for model_name in avg_metrics.index:
-            values = avg_metrics.loc[model_name].values.flatten().tolist()
-            if len(values) == N:  # Consistency check
-                values += [values[0]]
-                ax.plot(
-                    angles, values, linewidth=1, linestyle="solid", label=model_name
-                )
-                ax.fill(angles, values, alpha=0.1)
+            for model_name in avg_metrics.index:
+                values = avg_metrics.loc[model_name].values.flatten().tolist()
+                if len(values) == N:
+                    values += [values[0]]
+                    ax.plot(
+                        angles, values, linewidth=1, linestyle="solid", label=model_name
+                    )
+                    ax.fill(angles, values, alpha=0.1)
 
-        plt.legend(loc="upper right", bbox_to_anchor=(0.1, 0.1))
-        plt.title("Model Metrics Profile (Radar Chart)")
-        radar_path = os.path.join(output_path, f"images/radar_chart_{timestamp}.png")
-        plt.savefig(radar_path, bbox_inches="tight")
-        plt.close()
-        img_paths["radar"] = os.path.relpath(radar_path, output_path)
+            plt.legend(loc="upper right", bbox_to_anchor=(0.1, 0.1))
+            plt.title("Model Metrics Profile (Radar Chart)")
+            radar_path = os.path.join(
+                output_path, f"images/radar_chart_{timestamp}.png"
+            )
+            plt.savefig(radar_path, bbox_inches="tight")
+            plt.close()
+            img_paths["radar"] = os.path.relpath(radar_path, output_path)
+        except Exception as e:
+            logging.error(f"Failed to generate radar chart: {e}")
 
     # c) Heatmap
-    if not avg_metrics.empty:
-        plt.figure(figsize=(12, 6))
-        sns.heatmap(avg_metrics, annot=True, cmap="RdYlGn", vmin=0, vmax=1, fmt=".2f")
-        plt.title("Model x Metrics Heatmap")
-        heatmap_path = os.path.join(output_path, f"images/heatmap_{timestamp}.png")
-        plt.savefig(heatmap_path, bbox_inches="tight")
-        plt.close()
-        img_paths["heatmap"] = os.path.relpath(heatmap_path, output_path)
+    try:
+        avg_metrics = df.groupby("model")[metrics_cols].mean()
+        if not avg_metrics.empty:
+            plt.figure(figsize=(12, 6))
+            sns.heatmap(
+                avg_metrics, annot=True, cmap="RdYlGn", vmin=0, vmax=1, fmt=".2f"
+            )
+            plt.title("Model x Metrics Heatmap")
+            heatmap_path = os.path.join(output_path, f"images/heatmap_{timestamp}.png")
+            plt.savefig(heatmap_path, bbox_inches="tight")
+            plt.close()
+            img_paths["heatmap"] = os.path.relpath(heatmap_path, output_path)
+    except Exception as e:
+        logging.error(f"Failed to generate heatmap: {e}")
 
-    # d) Efficiency Comparison (New)
-    plt.figure(figsize=(10, 6))
-    if "ttft" in df.columns and df["ttft"].sum() > 0:
-        sns.boxplot(data=df, x="model", y="ttft", palette="coolwarm")
-        plt.title("Time To First Token (TTFT) by Model")
-        ttft_path = os.path.join(output_path, f"images/ttft_box_{timestamp}.png")
-        plt.savefig(ttft_path, bbox_inches="tight")
-        plt.close()
-        img_paths["ttft"] = os.path.relpath(ttft_path, output_path)
+    # d) TTFT Chart
+    try:
+        if "ttft" in df.columns and df["ttft"].sum() > 0:
+            plt.figure(figsize=(10, 6))
+            sns.boxplot(
+                data=df,
+                x="model",
+                y="ttft",
+                hue="model",
+                palette="coolwarm",
+                legend=False,
+            )
+            plt.title("Time To First Token (TTFT) by Model")
+            ttft_path = os.path.join(output_path, f"images/ttft_box_{timestamp}.png")
+            plt.savefig(ttft_path, bbox_inches="tight")
+            plt.close()
+            img_paths["ttft"] = os.path.relpath(ttft_path, output_path)
+    except Exception as e:
+        logging.error(f"Failed to generate ttft chart: {e}")
 
     # 3. HTML Report
     total_cases = len(df)
     models = df["model"].unique().tolist()
     pass_rate = (df["overall_score"] >= 0.7).mean() * 100
     avg_time = df["execution_time"].mean()
+
+    # Model Comparison Table
+    model_stats = (
+        df.groupby("model")
+        .agg(
+            {
+                "overall_score": "mean",
+                "ttft": "mean",
+                "execution_time": "mean",
+                "input_tokens": "mean",
+                "output_tokens": "mean",
+                "total_tokens": "mean",
+            }
+        )
+        .reset_index()
+    )
 
     html_content = f"""
     <!DOCTYPE html>
@@ -171,6 +212,7 @@ def generate_evaluation_report(
             th {{ background-color: #f8f9fa; }}
             .pass {{ color: green; font-weight: bold; }}
             .fail {{ color: red; font-weight: bold; }}
+            .small-text {{ font-size: 0.9em; color: #666; }}
         </style>
     </head>
     <body>
@@ -212,12 +254,46 @@ def generate_evaluation_report(
 
     html_content += f"""
             <h2>2. Model Performance Summary</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Model</th>
+                        <th>Avg Score</th>
+                        <th>Avg TTFT (s)</th>
+                        <th>Avg Latency (s)</th>
+                        <th>Avg Input Tokens</th>
+                        <th>Avg Output Tokens</th>
+                        <th>Avg Total Tokens</th>
+                    </tr>
+                </thead>
+                <tbody>
+    """
+
+    for _, row in model_stats.iterrows():
+        html_content += f"""
+            <tr>
+                <td>{row["model"]}</td>
+                <td>{row["overall_score"]:.2f}</td>
+                <td>{row["ttft"]:.3f}</td>
+                <td>{row["execution_time"]:.2f}</td>
+                <td>{int(row["input_tokens"])}</td>
+                <td>{int(row["output_tokens"])}</td>
+                <td>{int(row["total_tokens"])}</td>
+            </tr>
+        """
+
+    html_content += f"""
+                </tbody>
+            </table>
+            
+            <h3>Metric Breakdown</h3>
             {avg_metrics.to_html(classes="table", float_format="%.2f")}
 
             <h2>3. Detailed Test Results</h2>
             <table>
                 <tr>
                     <th>ID</th><th>Model</th><th>Type</th><th>Score</th><th>TTFT</th><th>Latency</th><th>Status</th>
+                    <th>Tokens (In/Out/Total)</th>
                 </tr>
                 {
         "".join(
@@ -230,6 +306,7 @@ def generate_evaluation_report(
                 f"<td>{row.get('ttft', 0):.3f}s</td>"
                 f"<td>{row['execution_time']:.2f}s</td>"
                 f"<td class='{'pass' if row['overall_score'] >= 0.7 else 'fail'}'>{'PASS' if row['overall_score'] >= 0.7 else 'FAIL'}</td>"
+                f"<td class='small-text'>{int(row.get('input_tokens', 0))} / {int(row.get('output_tokens', 0))} / {int(row.get('total_tokens', 0))}</td>"
                 f"</tr>"
                 for _, row in df.iterrows()
             ]

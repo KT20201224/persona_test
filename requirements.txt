@@ -10,5 +10,4 @@ accelerate
 bitsandbytes
 protobuf
 scipy
-# Observability
-langfuse
+

@@ -5,22 +5,6 @@ import torch
 from typing import Dict, Any, Union
 from openai import OpenAI
 
-# Langfuse Integration
-try:
-    from langfuse.decorators import observe, langfuse_context
-
-    LANGFUSE_AVAILABLE = True
-except ImportError:
-    LANGFUSE_AVAILABLE = False
-
-    # Dummy decorator to prevent NameError
-    def observe(*args, **kwargs):
-        def decorator(func):
-            return func
-
-        return decorator
-
-
 # Try importing transformers (graceful failure if not installed)
 try:
     from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
@@ -56,6 +40,7 @@ class RealModelInterface:
             )
             try:
                 self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                # Use bfloat16 for newer models (like Phi-3.5) if supported, else float16
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_name,
                     device_map="auto",
@@ -71,32 +56,16 @@ class RealModelInterface:
         else:
             self.client = OpenAI(api_key=api_key, base_url=base_url)
 
-    @observe(as_type="generation")
     def generate(
         self, system_prompt: str, user_input: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Routes generation to either Local HF or API and traces with Langfuse.
+        Routes generation to either Local HF or API.
         """
-        # Set Model Name only once for the trace
-        if LANGFUSE_AVAILABLE:
-            langfuse_context.update_current_observation(model=self.model_name)
-
         if self.is_local:
             result = self._generate_local(system_prompt, user_input)
         else:
             result = self._generate_api(system_prompt, user_input)
-
-        # Manually update token usage in Langfuse
-        if LANGFUSE_AVAILABLE:
-            langfuse_context.update_current_observation(
-                usage={
-                    "input": result["input_tokens"],
-                    "output": result["output_tokens"],
-                    "total": result["input_tokens"] + result["output_tokens"],
-                    "unit": "TOKENS",
-                }
-            )
 
         return result
 
@@ -116,6 +85,7 @@ class RealModelInterface:
                 chat, tokenize=False, add_generation_prompt=True
             )
         except:
+            # Fallback for models without chat template in tokenizer
             prompt_text = f"System: {system_prompt}\nUser: {user_content}\nAssistant:"
 
         start_time = time.time()
@@ -136,7 +106,6 @@ class RealModelInterface:
         cleaned_text = self._clean_json_markdown(response_text)
 
         # Calculate tokens locally
-        # HF tokenizer returns a list of ids, len() gives count
         in_tokens = len(self.tokenizer.encode(prompt_text))
         out_tokens = len(self.tokenizer.encode(response_text))
 
@@ -156,6 +125,8 @@ class RealModelInterface:
         ttft = 0.0
 
         try:
+            # Note: Streaming makes getting exact usage harder with OpenAI.
+            # We will approximate or use the 'usage' field if provided in final chunk (OpenAI recently added this).
             stream = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
@@ -164,27 +135,41 @@ class RealModelInterface:
                 ],
                 temperature=0.7,
                 stream=True,
+                stream_options={"include_usage": True},  # Request usage stats in stream
             )
 
             collected_chunks = []
             first_token_received = False
+            usage_data = None
 
             for chunk in stream:
-                if not first_token_received:
+                if (
+                    not first_token_received
+                    and chunk.choices
+                    and chunk.choices[0].delta.content
+                ):
                     ttft = time.time() - start_time
                     first_token_received = True
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    collected_chunks.append(delta)
+
+                if chunk.choices and chunk.choices[0].delta.content:
+                    collected_chunks.append(chunk.choices[0].delta.content)
+
+                # Check for usage in the last chunk
+                if hasattr(chunk, "usage") and chunk.usage:
+                    usage_data = chunk.usage
 
             response_text = "".join(collected_chunks)
             if ttft == 0:
                 ttft = time.time() - start_time
 
-            # Approximate simple token count for API if not provided in stream
-            # (Stream usually doesn't give usage unless configured)
-            in_tokens = len(system_prompt + user_content) // 4
-            out_tokens = len(response_text) // 4
+            # Use real usage if available, else approximate
+            if usage_data:
+                in_tokens = usage_data.prompt_tokens
+                out_tokens = usage_data.completion_tokens
+            else:
+                # Approximation (fallback)
+                in_tokens = len(system_prompt + user_content) // 4
+                out_tokens = len(response_text) // 4
 
             return {
                 "text": self._clean_json_markdown(response_text),
