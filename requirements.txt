@@ -5,7 +5,7 @@ seaborn
 python-dotenv
 # Hugging Face & PyTorch
 torch --index-url https://download.pytorch.org/whl/cu121
-transformers
+transformers>=4.48.0
 accelerate
 bitsandbytes
 protobuf

@@ -13,6 +13,14 @@ try:
 except ImportError:
     LANGFUSE_AVAILABLE = False
 
+    # Dummy decorator to prevent NameError
+    def observe(*args, **kwargs):
+        def decorator(func):
+            return func
+
+        return decorator
+
+
 # Try importing transformers (graceful failure if not installed)
 try:
     from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
