@@ -54,6 +54,7 @@ def generate_evaluation_report(
                 "output_tokens": res.get("output_tokens", 0),
                 "total_tokens": res.get("input_tokens", 0)
                 + res.get("output_tokens", 0),
+                "input": res.get("input", {}),
                 # Handle output text whether it's dict or string
                 "output_text": json.dumps(
                     res.get("output", ""), ensure_ascii=False, indent=2
