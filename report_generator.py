@@ -280,11 +280,11 @@ def generate_evaluation_report(
                 <tr>
                     <th style="width: 5%">ID</th>
                     <th style="width: 10%">Model</th>
-                    <th style="width: 10%">Type</th>
+                    <th style="width: 8%">Type</th>
                     <th style="width: 5%">Score</th>
-                    <th style="width: 5%">Latency</th>
                     <th style="width: 5%">Status</th>
-                    <th style="width: 40%">Generated Output</th>
+                    <th style="width: 25%">Input Case</th>
+                    <th style="width: 32%">Generated Output</th>
                     <th style="width: 10%">Tokens (In/Out)</th>
                 </tr>
                 {
@@ -295,8 +295,14 @@ def generate_evaluation_report(
                 f"<td>{row['model']}</td>"
                 f"<td>{row['case_type']}</td>"
                 f"<td>{row['overall_score']:.2f}</td>"
-                f"<td>{row['execution_time']:.2f}s</td>"
                 f"<td class='{'pass' if row['overall_score'] >= 0.7 else 'fail'}'>{'PASS' if row['overall_score'] >= 0.7 else 'FAIL'}</td>"
+                f"<td><div class='output-box'>"
+                f"<b>Name:</b> {row['input'].get('name')}<br>"
+                f"<b>Profile:</b> {row['input'].get('gender')}, {row['input'].get('age_group')}<br>"
+                f"<b>Allergies:</b> {row['input'].get('allergies')}<br>"
+                f"<b>Pref:</b> {row['input'].get('preferred_food_categories')}<br>"
+                f"<b>Extra:</b> {row['input'].get('extra_text')}"
+                f"</div></td>"
                 f"<td><div class='output-box'>{row['output_text']}</div></td>"
                 f"<td class='small-text'>{int(row.get('input_tokens', 0))} / {int(row.get('output_tokens', 0))}</td>"
                 f"</tr>"
