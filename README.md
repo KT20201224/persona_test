@@ -52,18 +52,18 @@
 
 ---
 
-## 🧪 Test Dataset Strategy
-To rigorously test the models, we designed **20 Diverse Scenarios** divided into 5 strategic categories. This ensures that high scores are not just due to memorization but true understanding.
+## 🧪 테스트 데이터셋 전략 (Test Dataset Strategy)
+단순한 암기가 아닌 모델의 진정한 이해력을 검증하기 위해, **5가지 전략적 카테고리로 구성된 20개의 시나리오**를 설계했습니다.
 
-| Category | Cases | Description | Key Evaluation Metrics |
+| 카테고리 | 개수 | 설명 | 핵심 평가 지표 |
 |----------|-------|-------------|------------------------|
-| **1. Normal Cases** | 3 | Simple, clear inputs with no conflicts. | `json_schema_compliance`, `field_coverage` (Baseline) |
-| **2. Logic & Contradiction** | 5 | Inputs containing conflicting info (e.g., "Allergic to shellfish" but "Loves Crab"). | `consistency`, `classification_accuracy` (Safety Check) |
-| **3. Ambiguity & Creativity** | 4 | Vague inputs like "Anywhere is fine" or "Hip vibes". | `extra_text_parsing`, `specificity` (User Intent understanding) |
-| **4. Social Context** | 4 | Situational constraints like "Business Dinner", "Blind Date", "Foreigner Friend". | `discussion_readiness` (Contextual Awareness) |
-| **5. Constraint Overload** | 4 | 5+ Allergies or extremely picky eaters. | `field_coverage` (Memory Capacity & Attention) |
+| **1. 일반 케이스 (Normal)** | 3 | 명확하고 충돌 없는 단순한 입력. | `json_schema_compliance`, `field_coverage` (기본 동작 확인) |
+| **2. 논리 & 모순 (Logic)** | 5 | 정보 간의 충돌이 있는 경우 (예: "갑각류 알레르기" vs "꽃게탕 선호"). | `consistency`, `classification_accuracy` (안전성 & 판단력) |
+| **3. 모호함 & 창의성 (Ambiguity)** | 4 | "아무거나 좋아요", "힙한 감성" 등 주관적인 입력. | `extra_text_parsing`, `specificity` (사용자 의도 파악) |
+| **4. 사회적 맥락 (Context)** | 4 | "상견례", "회식", "외국인 친구" 등 상황적 제약. | `discussion_readiness` (눈치 & 상황 판단) |
+| **5. 제약 과부하 (Overload)** | 4 | 알레르기 5개 이상, 극도로 까다로운 조건. | `field_coverage` (메모리 용량 & 주의력) |
 
-This dataset is designed to expose the **"Intelligence Gap"** between simple models (7B) and advanced models (GPT-4 class).
+이 데이터셋은 7B급 소형 모델과 GPT-4급 고성능 모델 사이의 **"지능 격차(Intelligence Gap)"**를 명확히 드러내도록 설계되었습니다.
 
 ---
 
