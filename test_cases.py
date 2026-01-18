@@ -6,7 +6,7 @@ TEST_CASES = [
     # -------------------------------------------------------------------------
     {
         "id": 1,
-        "type": "Normal",
+        "case_type": "Normal",
         "description": "Clear preferences without conflicts",
         "input": {
             "name": "김철수",
@@ -21,7 +21,7 @@ TEST_CASES = [
     },
     {
         "id": 2,
-        "type": "Normal",
+        "case_type": "Normal",
         "description": "Vegetarian user with clear dislikes",
         "input": {
             "name": "이영희",
@@ -36,7 +36,7 @@ TEST_CASES = [
     },
     {
         "id": 3,
-        "type": "Normal",
+        "case_type": "Normal",
         "description": "Seafood lover with no restrictions",
         "input": {
             "name": "박민수",
@@ -54,7 +54,7 @@ TEST_CASES = [
     # -------------------------------------------------------------------------
     {
         "id": 4,
-        "type": "Edge - Contradiction",
+        "case_type": "Edge - Contradiction",
         "description": "Allergy vs Preference Conflict (Shellfish)",
         "input": {
             "name": "최모순",
@@ -69,7 +69,7 @@ TEST_CASES = [
     },
     {
         "id": 5,
-        "type": "Edge - Contradiction",
+        "case_type": "Edge - Contradiction",
         "description": "Dietary Restriction vs Request (Vegan vs Meat)",
         "input": {
             "name": "강비건",
@@ -84,7 +84,7 @@ TEST_CASES = [
     },
     {
         "id": 6,
-        "type": "Edge - Contradiction",
+        "case_type": "Edge - Contradiction",
         "description": "Spicy Allergy vs Spicy Preference",
         "input": {
             "name": "맵찔이",
@@ -99,7 +99,7 @@ TEST_CASES = [
     },
     {
         "id": 7,
-        "type": "Edge - Deep Logic",
+        "case_type": "Edge - Deep Logic",
         "description": "Implicit Ingredient Conflict (Milk Allergy vs Cream Pasta)",
         "input": {
             "name": "우유No",
@@ -114,7 +114,7 @@ TEST_CASES = [
     },
     {
         "id": 8,
-        "type": "Edge - Deep Logic",
+        "case_type": "Edge - Deep Logic",
         "description": "Religious Restriction (Halal vs Pork)",
         "input": {
             "name": "알리",
@@ -132,7 +132,7 @@ TEST_CASES = [
     # -------------------------------------------------------------------------
     {
         "id": 9,
-        "type": "Edge - Ambiguity",
+        "case_type": "Edge - Ambiguity",
         "description": "Zero Preference Input",
         "input": {
             "name": "무관심",
@@ -147,7 +147,7 @@ TEST_CASES = [
     },
     {
         "id": 10,
-        "type": "Edge - Ambiguity",
+        "case_type": "Edge - Ambiguity",
         "description": "Abstract Atmosphere Request",
         "input": {
             "name": "감성파",
@@ -162,7 +162,7 @@ TEST_CASES = [
     },
     {
         "id": 11,
-        "type": "Edge - Ambiguity",
+        "case_type": "Edge - Ambiguity",
         "description": "Budget Constraint only",
         "input": {
             "name": "짠돌이",
@@ -177,7 +177,7 @@ TEST_CASES = [
     },
     {
         "id": 12,
-        "type": "Edge - Ambiguity",
+        "case_type": "Edge - Ambiguity",
         "description": "Contradictory Vibe (Quiet + Party)",
         "input": {
             "name": "혼란",
@@ -195,7 +195,7 @@ TEST_CASES = [
     # -------------------------------------------------------------------------
     {
         "id": 13,
-        "type": "Edge - Context",
+        "case_type": "Edge - Context",
         "description": "Business Dinner with Boss",
         "input": {
             "name": "김대리",
@@ -210,7 +210,7 @@ TEST_CASES = [
     },
     {
         "id": 14,
-        "type": "Edge - Context",
+        "case_type": "Edge - Context",
         "description": "Date Night (Blind Date)",
         "input": {
             "name": "소개팅남",
