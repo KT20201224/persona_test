@@ -50,11 +50,16 @@ def generate_evaluation_report(
                 "model": res.get("model_name", "Unknown"),
                 "case_type": res.get("case_type", "Normal"),
                 "execution_time": res.get("execution_time", 0),
-                "ttft": res.get("ttft", 0),
                 "input_tokens": res.get("input_tokens", 0),
                 "output_tokens": res.get("output_tokens", 0),
                 "total_tokens": res.get("input_tokens", 0)
                 + res.get("output_tokens", 0),
+                # Handle output text whether it's dict or string
+                "output_text": json.dumps(
+                    res.get("output", ""), ensure_ascii=False, indent=2
+                )
+                if isinstance(res.get("output"), dict)
+                else str(res.get("output", "")),
                 **res.get("metrics", {}),
             }
             for idx, res in enumerate(test_results)
@@ -149,47 +154,28 @@ def generate_evaluation_report(
     except Exception as e:
         logging.error(f"Failed to generate heatmap: {e}")
 
-    # d) TTFT Chart
-    try:
-        if "ttft" in df.columns and df["ttft"].sum() > 0:
-            plt.figure(figsize=(10, 6))
-            sns.boxplot(
-                data=df,
-                x="model",
-                y="ttft",
-                hue="model",
-                palette="coolwarm",
-                legend=False,
-            )
-            plt.title("Time To First Token (TTFT) by Model")
-            ttft_path = os.path.join(output_path, f"images/ttft_box_{timestamp}.png")
-            plt.savefig(ttft_path, bbox_inches="tight")
-            plt.close()
-            img_paths["ttft"] = os.path.relpath(ttft_path, output_path)
-    except Exception as e:
-        logging.error(f"Failed to generate ttft chart: {e}")
-
     # 3. HTML Report
     total_cases = len(df)
     models = df["model"].unique().tolist()
-    pass_rate = (df["overall_score"] >= 0.7).mean() * 100
+    global_pass_rate = (df["overall_score"] >= 0.7).mean() * 100
     avg_time = df["execution_time"].mean()
 
     # Model Comparison Table
-    model_stats = (
-        df.groupby("model")
-        .agg(
-            {
-                "overall_score": "mean",
-                "ttft": "mean",
-                "execution_time": "mean",
-                "input_tokens": "mean",
-                "output_tokens": "mean",
-                "total_tokens": "mean",
-            }
-        )
-        .reset_index()
+    model_stats = df.groupby("model").agg(
+        {
+            "overall_score": "mean",
+            "execution_time": "mean",
+            "input_tokens": "mean",
+            "output_tokens": "mean",
+            "total_tokens": "mean",
+        }
     )
+    # Calculate Success Rate per model
+    success_rates = df.groupby("model")["overall_score"].apply(
+        lambda x: (x >= 0.7).mean() * 100
+    )
+    model_stats["success_rate"] = success_rates
+    model_stats = model_stats.reset_index()
 
     html_content = f"""
     <!DOCTYPE html>
@@ -200,19 +186,29 @@ def generate_evaluation_report(
         <title>LLM Persona Evaluation Report</title>
         <style>
             body {{ font-family: 'AppleGothic', 'Malgun Gothic', 'Noto Sans KR', sans-serif; margin: 40px; background-color: #f5f5f5; }}
-            .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            .container {{ max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
             h1, h2 {{ color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }}
             .summary-box {{ display: flex; justify-content: space-around; background: #e3f2fd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
             .stat {{ text-align: center; }}
             .value {{ font-size: 24px; font-weight: bold; color: #1976d2; }}
             .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }}
             img {{ max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }}
-            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-            th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }}
+            th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; word-wrap: break-word; }}
             th {{ background-color: #f8f9fa; }}
             .pass {{ color: green; font-weight: bold; }}
             .fail {{ color: red; font-weight: bold; }}
-            .small-text {{ font-size: 0.9em; color: #666; }}
+            .small-text {{ font-size: 0.85em; color: #666; }}
+            .output-box {{ 
+                max-height: 200px; 
+                overflow-y: auto; 
+                background: #f8f9fa; 
+                padding: 10px; 
+                border-radius: 4px; 
+                font-family: monospace; 
+                font-size: 0.8em; 
+                white-space: pre-wrap;
+            }}
         </style>
     </head>
     <body>
@@ -223,7 +219,7 @@ def generate_evaluation_report(
             <div class="summary-box">
                 <div class="stat"><div class="value">{len(models)}</div><div class="label">Models Evaluated</div></div>
                 <div class="stat"><div class="value">{total_cases}</div><div class="label">Total Cases</div></div>
-                <div class="stat"><div class="value">{pass_rate:.1f}%</div><div class="label">Pass Rate</div></div>
+                <div class="stat"><div class="value">{global_pass_rate:.1f}%</div><div class="label">Global Pass Rate</div></div>
                 <div class="stat"><div class="value">{avg_time:.2f}s</div><div class="label">Avg Latency</div></div>
             </div>
 
@@ -242,24 +238,14 @@ def generate_evaluation_report(
                 <h3>Detailed Metrics Heatmap</h3>
                 <img src="{img_paths.get("heatmap", "")}" alt="Heatmap">
             </div>
-            """
 
-    if "ttft" in img_paths:
-        html_content += f"""
-            <div>
-                <h3>Time To First Token (TTFT) Analysis</h3>
-                <img src="{img_paths["ttft"]}" alt="TTFT Chart">
-            </div>
-        """
-
-    html_content += f"""
             <h2>2. Model Performance Summary</h2>
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Model</th>
+                        <th style="width: 15%">Model</th>
                         <th>Avg Score</th>
-                        <th>Avg TTFT (s)</th>
+                        <th>Success Rate (%)</th>
                         <th>Avg Latency (s)</th>
                         <th>Avg Input Tokens</th>
                         <th>Avg Output Tokens</th>
@@ -274,7 +260,7 @@ def generate_evaluation_report(
             <tr>
                 <td>{row["model"]}</td>
                 <td>{row["overall_score"]:.2f}</td>
-                <td>{row["ttft"]:.3f}</td>
+                <td>{row["success_rate"]:.1f}%</td>
                 <td>{row["execution_time"]:.2f}</td>
                 <td>{int(row["input_tokens"])}</td>
                 <td>{int(row["output_tokens"])}</td>
@@ -292,8 +278,14 @@ def generate_evaluation_report(
             <h2>3. Detailed Test Results</h2>
             <table>
                 <tr>
-                    <th>ID</th><th>Model</th><th>Type</th><th>Score</th><th>TTFT</th><th>Latency</th><th>Status</th>
-                    <th>Tokens (In/Out/Total)</th>
+                    <th style="width: 5%">ID</th>
+                    <th style="width: 10%">Model</th>
+                    <th style="width: 10%">Type</th>
+                    <th style="width: 5%">Score</th>
+                    <th style="width: 5%">Latency</th>
+                    <th style="width: 5%">Status</th>
+                    <th style="width: 40%">Generated Output</th>
+                    <th style="width: 10%">Tokens (In/Out)</th>
                 </tr>
                 {
         "".join(
@@ -303,10 +295,10 @@ def generate_evaluation_report(
                 f"<td>{row['model']}</td>"
                 f"<td>{row['case_type']}</td>"
                 f"<td>{row['overall_score']:.2f}</td>"
-                f"<td>{row.get('ttft', 0):.3f}s</td>"
                 f"<td>{row['execution_time']:.2f}s</td>"
                 f"<td class='{'pass' if row['overall_score'] >= 0.7 else 'fail'}'>{'PASS' if row['overall_score'] >= 0.7 else 'FAIL'}</td>"
-                f"<td class='small-text'>{int(row.get('input_tokens', 0))} / {int(row.get('output_tokens', 0))} / {int(row.get('total_tokens', 0))}</td>"
+                f"<td><div class='output-box'>{row['output_text']}</div></td>"
+                f"<td class='small-text'>{int(row.get('input_tokens', 0))} / {int(row.get('output_tokens', 0))}</td>"
                 f"</tr>"
                 for _, row in df.iterrows()
             ]
