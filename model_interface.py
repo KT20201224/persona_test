@@ -44,7 +44,7 @@ class RealModelInterface:
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_name,
                     device_map="auto",
-                    torch_dtype=torch.float16,
+                    torch_dtype="auto",
                     trust_remote_code=True,
                 )
                 self.pipe = pipeline(
